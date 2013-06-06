@@ -74,7 +74,19 @@ function display_part($part, $get, $simpleTableParts, $displayNavBar = True, $pa
     $i = 0;
     foreach ($inv as $line) {
         foreach ($line as $vals) {
-            $all[$vals[0]][$i] = $vals[1];
+            /* 
+             * If $vals[1] is an empty string or an array, don't use the _T() function
+             * Empty fields are replaced by a trademark text by transifex
+             * if it's an array, it's an editable field
+             */
+
+            $all[$vals[0]][$i] = '';
+            if (!is_array($vals[1]) && $vals[1] != '') { // translatable fields
+                $all[$vals[0]][$i] = _T($vals[1]);
+            }
+            elseif (is_array($vals[1])) { // editable fields
+                $all[$vals[0]][$i] = $vals[1];
+            }
         }
         $i++;
     }
@@ -105,11 +117,6 @@ function display_part($part, $get, $simpleTableParts, $displayNavBar = True, $pa
                 }
                 else {
                     $val[] = $all[$k][0];
-                  // Dirty hack to translate Yes and No
-                  // This strings should be declared at the end of this file too
-                  if ($val[count($val)-1] == 'Yes' || $val[count($val)-1] == 'No' ) {
-                      $val[count($val)-1] = _T($val[count($val)-1], 'glpi');
-                  }
                 }
             }
         }
@@ -127,8 +134,9 @@ function display_part($part, $get, $simpleTableParts, $displayNavBar = True, $pa
     else {
         $n = null;
 
-        // Nothing found
-        if (count($all) == 0)  {
+        // If nothing found, display a "nothing found" message
+        // except on Hardware tab (identified by $partTitle == null) => display nothing
+        if (count($all) == 0 && $partTitle == null)  {
             switch($part) {
             case 'History':
                 printf('<p>%s</p>', _T('No record found for this period.', 'glpi'));
@@ -149,11 +157,6 @@ function display_part($part, $get, $simpleTableParts, $displayNavBar = True, $pa
             }
             else {
                 $n->addExtraInfo($v, _T($k, 'glpi'));
-                // Dirty hack to translate Yes and No
-                // This strings should be declared at the end of this file too
-                if ($v == 'Yes' || $v == 'No') {
-                    $v = _T($v, 'glpi');
-                }
             }
         }
 
@@ -225,8 +228,12 @@ _T('Version', 'glpi');
 _T('Computer Name', 'glpi');
 _T('Description', 'glpi');
 _T('Entity (Location)', 'glpi');
+_T('Entity', 'glpi');
+_T('Location', 'glpi');
 _T('Last Logged User', 'glpi');
 _T('OS', 'glpi');
+_T('Operating System', 'glpi');
+_T('Computer Type', 'glpi');
 _T('Model / Type', 'glpi');
 _T('Manufacturer', 'glpi');
 _T('Serial Number', 'glpi');
@@ -242,12 +249,14 @@ _T('User', 'glpi');
 _T('Category', 'glpi');
 _T('Action', 'glpi');
 _T('Today', 'glpi');
-_T('Last week', 'glpi');
-_T('Last month', 'glpi');
+_T('Last 7 days', 'glpi');
+_T('Last 30 days', 'glpi');
 _T('All', 'glpi');
 _T('Service Pack', 'glpi');
+_T('Windows Key', 'glpi');
 _T('Domain', 'glpi');
 _T('State', 'glpi');
+_T('Unknown', 'glpi');
 _T('Inventory Number', 'glpi');
 // From Antivirus tab
 _T('Enabled', 'glpi');

@@ -246,6 +246,8 @@ class Glpi08(DyngroupDatabaseHelper):
         self.diskfs = Table('glpi_filesystems', self.metadata, autoload = True)
         mapper(DiskFs, self.diskfs)
 
+        ## Fusion Inventory tables
+
 	# glpi_plugin_fusinvinventory_antivirus
         # this table comes with Fusioninventory plugin and could not exists
         # if you don't use this plugin, so use try / except
@@ -262,6 +264,16 @@ class Glpi08(DyngroupDatabaseHelper):
             self.logger.warn('Load of fusion antivirus table failed')
             self.logger.warn('This means you can not know antivirus statuses of your machines.')
             self.logger.warn('This feature comes with Fusioninventory GLPI plugin')
+
+        # glpi_plugin_fusioninventory_locks
+        self.fusionlocks = None
+
+        if self.fusionantivirus is not None: # Fusion is not installed
+            self.logger.debug('Load glpi_plugin_fusioninventory_locks')
+            self.fusionlocks = Table('glpi_plugin_fusioninventory_locks', self.metadata,
+                Column('items_id', Integer, ForeignKey('glpi_computers.id')),
+                autoload = True)
+            mapper(FusionLocks, self.fusionlocks)
 
         # glpi_computerdisks
         self.disk = Table('glpi_computerdisks', self.metadata,
@@ -1343,7 +1355,10 @@ class Glpi08(DyngroupDatabaseHelper):
 
         if infocoms is not None and infocoms.warranty_date is not None:
             endDate = add_months(infocoms.warranty_date, infocoms.warranty_duration)
-            return endDate.strftime('%Y-%m-%d')
+            if datetime.datetime.now().date() > endDate:
+                return '<span style="color:red;font-weight: bold;">%s</span>' % endDate.strftime('%Y-%m-%d')
+            else:
+                return endDate.strftime('%Y-%m-%d')
 
         return ''
 
@@ -1426,8 +1441,8 @@ class Glpi08(DyngroupDatabaseHelper):
                             ['Device', disk.device],
                             ['Mount Point', disk.mountpoint],
                             ['Filesystem', diskfs],
-                            ['Size', str(disk.totalsize) + ' MB'],
-                            ['Free Size', str(disk.freesize) + ' MB'],
+                            ['Size', disk.totalsize and str(disk.totalsize) + ' MB' or ''],
+                            ['Free Size', disk.freesize and str(disk.freesize) + ' MB' or ''],
                         ]
                         ret.append(l)
         return ret
@@ -1477,8 +1492,6 @@ class Glpi08(DyngroupDatabaseHelper):
                     if antivirus.version:
                         l.insert(1, ['Version', antivirus.version])
                     ret.append(l)
-                else:
-                    ret=[]
         return ret
 
     def getLastMachineSoftwaresPart(self, session, uuid, part, min = 0, max = -1, filt = None, options = {}, count = False):
@@ -1545,6 +1558,10 @@ class Glpi08(DyngroupDatabaseHelper):
         @rtype: tuple
         """
 
+        # Reminder:
+        #   If you add some other classes, check
+        #   if __tablename__ exists for these classes
+
         values = {
             'computer_name': (Machine, 'name'),
             'description': (Machine, 'comment'),
@@ -1574,8 +1591,28 @@ class Glpi08(DyngroupDatabaseHelper):
 
             # Get SQL field who will be updated
             table, field = self.__getTableAndFieldFromName(name)
-
             session.query(table).filter_by(id=fromUUID(uuid)).update({field: value})
+
+            # Set updated field as a locked field so it won't be updated
+            # at next inventory
+            query = session.query(FusionLocks).filter(self.fusionlocks.c.items_id == fromUUID(uuid))
+            flocks = query.first()
+            if flocks is not None:
+                # Update glpi_plugin_fusioninventory_locks tablefields table
+                flocksFields = eval(flocks.tablefields)
+                if field not in flocksFields:
+                    flocksFields.append(field)
+                    query.update({'tablefields': str(flocksFields).replace("'", '"')})
+            else:
+                # Create new glpi_plugin_fusioninventory_locks entry
+                session.execute(
+                    self.fusionlocks.insert().values({
+                        'tablename': table.__tablename__,
+                        'items_id': fromUUID(uuid),
+                        'tablefields': str([field]).replace("'", '"'),
+                    })
+                )
+
             session.close()
             return True
         except Exception, e:
@@ -1652,6 +1689,7 @@ class Glpi08(DyngroupDatabaseHelper):
                     ['Last Logged User', machine.contact],
                     ['OS', os],
                     ['Service Pack', servicepack],
+                    ['Windows Key', machine.os_license_number],
                     ['Model / Type', modelType],
                     ['Manufacturer', manufacturer],
                     ['Serial Number', serialNumber],
@@ -1678,7 +1716,7 @@ class Glpi08(DyngroupDatabaseHelper):
                 if processor is not None:
                     l = [
                         ['Name', designation],
-                        ['Frequency', str(processor.specificity) + ' Hz'],
+                        ['Frequency', processor.specificity and str(processor.specificity) + ' Hz' or ''],
                     ]
                     ret.append(l)
         return ret
@@ -1704,7 +1742,7 @@ class Glpi08(DyngroupDatabaseHelper):
                         ['Name', designation],
                         ['Type', type],
                         ['Frequency', frequence],
-                        ['Size', str(memory.specificity) + ' MB'],
+                        ['Size', memory.specificity and str(memory.specificity) + ' MB' or ''],
                     ]
                     ret.append(l)
         return ret
@@ -1726,7 +1764,7 @@ class Glpi08(DyngroupDatabaseHelper):
                 if hd is not None:
                     l = [
                         ['Name', designation],
-                        ['Size', str(hd.specificity) + ' MB'],
+                        ['Size', hd.specificity and str(hd.specificity) + ' MB' or ''],
                     ]
                     ret.append(l)
         return ret
@@ -1791,7 +1829,7 @@ class Glpi08(DyngroupDatabaseHelper):
                 if card is not None:
                     l = [
                         ['Name', card.designation],
-                        ['Memory', str(card.specif_default) + ' MB'],
+                        ['Memory', card.specif_default and str(card.specif_default) + ' MB' or ''],
                         ['Type', interfaceType],
                     ]
                     ret.append(l)
@@ -2750,6 +2788,8 @@ class Glpi08(DyngroupDatabaseHelper):
  
 # Class for SQLalchemy mapping
 class Machine(object):
+    __tablename__ = 'glpi_computers'
+
     def getUUID(self):
         return toUUID(self.id)
     def toH(self):
@@ -2794,6 +2834,9 @@ class DiskFs(object):
     pass
 
 class FusionAntivirus(object):
+    pass
+
+class FusionLocks(object):
     pass
 
 class Disk(object):

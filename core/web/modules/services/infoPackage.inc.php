@@ -27,7 +27,7 @@
 $MMCApp =& MMCApp::getInstance();
 
 $mod = new Module("services");
-$mod->setVersion("3.0.97");
+$mod->setVersion("3.1.0");
 $mod->setRevision('');
 $mod->setDescription(_T("Services management", "services"));
 $mod->setAPIVersion("0:0:0");
@@ -85,11 +85,11 @@ $page = new Page("ajaxOthersServicesFilter");
 $page->setOptions(array("visible" => False, "AJAX" => True));
 $submod->addPage($page);
 
-$page = new Page("reboot");
+$page = new Page("reboot", _T("Reboot"));
 $page->setOptions(array("visible" => False));
 $submod->addPage($page);
 
-$page = new Page("poweroff");
+$page = new Page("poweroff", _T("Poweroff"));
 $page->setOptions(array("visible" => False));
 $submod->addPage($page);
 

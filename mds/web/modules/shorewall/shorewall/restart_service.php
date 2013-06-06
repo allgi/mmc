@@ -1,8 +1,7 @@
 <?php
 /**
- * (c) 2009 Glen Ogilvie
- *
- * $Id$
+ * (c) 2004-2007 Linbox / Free&ALter Soft, http://linbox.com
+ * (c) 2007-2008 Mandriva, http://www.mandriva.com/
  *
  * This file is part of Mandriva Management Console (MMC).
  *
@@ -17,23 +16,14 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with MMC.  If not, see <http://www.gnu.org/licenses/>.
+ * along with MMC; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
-
-
-
-/**
- * module declaration
- */
-$mod = new Module("userquota");
-$mod->setVersion("2.5.0");
-$mod->setRevision('$Rev$');
-$mod->setDescription(_T("Manage user quotas for filesystems and networks", "userquota"));
-$mod->setAPIVersion('0:0:0');
-$mod->setPriority(700);
-
-$MMCApp =& MMCApp::getInstance();
-$MMCApp->addModule($mod);
+$page = $_GET["page"];
+restartShorewallService();
+if (!isXMLRPCError())
+    new NotifyWidgetSuccess(_T("The service has been asked to restart."));
+redirectTo(urlStrRedirect("shorewall/shorewall/$page"));
 
 ?>

@@ -42,6 +42,8 @@ from mmc.core.version import scmRevision
 from mmc.core.audit import AuditFactory as AF
 from mmc.plugins.base.audit import AA, AT, PLUGIN_NAME
 from mmc.plugins.base.subscription import SubscriptionManager
+from mmc.agent import PluginManager
+
 
 from uuid import uuid1
 import shelve
@@ -74,7 +76,7 @@ INI = mmcconfdir + "/plugins/base.ini"
 
 modList= None
 
-VERSION = "3.0.97"
+VERSION = "3.1.0"
 APIVERSION = "9:0:5"
 REVISION = scmRevision("$Rev$")
 
@@ -230,6 +232,9 @@ def searchUserAdvanced(searchFilter = "", start = None, end = None):
     if searchFilter:
         searchFilter = "(|(uid=%s)(givenName=%s)(sn=%s)(telephoneNumber=%s)(mail=%s))" % (searchFilter, searchFilter, searchFilter, searchFilter, searchFilter)
     return ldapObj.searchUserAdvance(searchFilter, None, start, end)
+
+def getGroupEntry(cn):
+    return ldapUserGroupControl().getGroupEntry(cn)
 
 def getGroupsLdap(searchFilter= ""):
     ldapObj = ldapUserGroupControl()
@@ -1020,9 +1025,35 @@ class LdapUserGroupControl:
                     'objectclass':('posixGroup','top')
                      }
         attributes = [ (k,v) for k,v in group_info.items() ]
-        self.l.add_s(entry, attributes)
+        try:
+            self.l.add_s(entry, attributes)
+        except ldap.ALREADY_EXISTS:
+            pass
         r.commit()
-        return gidNumber
+        return self.getGroupEntry(cn)
+
+    def getGroupEntry(self, cn, base = None):
+        """
+        Search a group entry and returns the raw LDAP entry content of a group.
+
+        @param cn: Group common name
+        @type cn: str
+
+        @param base: LDAP base scope where to look for
+        @type base: str
+
+        @return: full raw ldap array (dictionnary of lists)
+        @type: dict
+        """
+        if not base: base = self.baseGroupsDN
+        ret = self.search("cn=" + str(cn), base)
+        newattrs = {}
+        if ret:
+            for result in ret:
+                c, attrs = result[0]
+                newattrs = copy.deepcopy(attrs)
+                break
+        return newattrs
 
     def delUserFromGroup(self, cngroup, uiduser):
         """
@@ -2539,8 +2570,6 @@ class LogView:
 
     def __init__(self, logfile = localstatedir + '/log/ldap.log', pattern=None):
         config = PluginConfig("base")
-        try: self.enabled = config.getboolean("ldap", "logViewModule")
-        except (NoSectionError, NoOptionError): self.enabled = True
         try: self.logfile = config.get("ldap", "logfile")
         except (NoSectionError, NoOptionError): self.logfile = logfile
         try: self.maxElt = config.get("LogView", "maxElt")
@@ -2554,7 +2583,8 @@ class LogView:
                 }
 
     def isLogViewEnabled(self):
-        return self.enabled
+        # Disable logview module if the plugin services is enabled
+        return not 'services' in PluginManager().getEnabledPluginNames()
 
     def revReadlines(self, arg, bufsize = 8192):
         """
